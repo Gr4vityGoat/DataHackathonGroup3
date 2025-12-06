@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Cleanup Service</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Torque Time Series Data Cleanup</h1>
+            <p class="subtitle">Azure Blob Storage Data Processing Service</p>
+        </header>
+
+        <main>
+            <!-- Status Section -->
+            <section class="card">
+                <h2>Service Status</h2>
+                <div class="status-box">
+                    <div class="status-item">
+                        <span class="label">Service Status:</span>
+                        <span id="serviceStatus" class="status-value">Checking...</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">Processing:</span>
+                        <span id="processingStatus" class="status-value">Not processing</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">Message:</span>
+                        <span id="statusMessage" class="status-message">Ready</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Actions Section -->
+            <section class="card">
+                <h2>Process Data</h2>
+                <div class="actions">
+                    <button id="processAllBtn" class="btn btn-primary" onclick="processAllFiles()">
+                        Process All Files
+                    </button>
+                    <button id="processSingleBtn" class="btn btn-secondary" onclick="toggleSingleFileForm()">
+                        Process Single File
+                    </button>
+                </div>
+
+                <!-- Single File Form (Hidden by default) -->
+                <div id="singleFileForm" class="form-section" style="display: none;">
+                    <div class="form-group">
+                        <label for="filename">Filename:</label>
+                        <input type="text" id="filename" placeholder="e.g., torque_timeseries.csv">
+                    </div>
+                    <button class="btn btn-primary" onclick="processSingleFile()">
+                        Process File
+                    </button>
+                    <button class="btn btn-secondary" onclick="toggleSingleFileForm()">
+                        Cancel
+                    </button>
+                </div>
+            </section>
+
+            <!-- Progress Section -->
+            <section class="card">
+                <h2>Processing Progress</h2>
+                <div class="progress-box">
+                    <div class="progress-item">
+                        <span class="label">Current File:</span>
+                        <span id="currentFile">None</span>
+                    </div>
+                    <div class="progress-item">
+                        <span class="label">Files Processed:</span>
+                        <span id="filesProcessed">0</span>
+                    </div>
+                    <div class="progress-item">
+                        <span class="label">Last Update:</span>
+                        <span id="lastUpdate">Never</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Information Section -->
+            <section class="card info-section">
+                <h2>Service Information</h2>
+                <div class="info-content">
+                    <h3>Cleaning Rules Applied:</h3>
+                    <ul>
+                        <li><strong>Timestamp Conversion:</strong> Converts MM:SS.d format to ISO-8601 standard</li>
+                        <li><strong>Data Quality Validation:</strong> Marks rows as "missing" if Torque_Nm or Torque_pct_of_rated are empty</li>
+                        <li><strong>File Processing:</strong> Only processes torque_timeseries.csv files</li>
+                    </ul>
+                    
+                    <h3>Data Flow:</h3>
+                    <ul>
+                        <li>Input: Azure Blob Storage <code>input</code> container</li>
+                        <li>Processing: Data validation and formatting</li>
+                        <li>Output: Azure Blob Storage <code>output</code> container</li>
+                    </ul>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Azure Data Hackathon - Data Cleanup Service v1.0</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

@@ -210,15 +210,10 @@ class TorqueTimeSeriesCleanup:
             raise
 
 
-def main():
-    """Main entry point for the cleanup service."""
+if __name__ == "__main__":
     try:
         cleanup_service = TorqueTimeSeriesCleanup()
         cleanup_service.process_all_blobs()
     except Exception as e:
         logger.error(f"Service failed: {e}")
         raise
-
-
-if __name__ == "__main__":
-    main()

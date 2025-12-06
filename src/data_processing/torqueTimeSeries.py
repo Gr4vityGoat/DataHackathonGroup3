@@ -48,38 +48,56 @@ class TorqueTimeSeriesCleanup:
         """
         Convert timestamp to ISO-8601 format.
         
-        Handles formats like "00:02.0" (MM:SS.m) and converts to ISO-8601.
-        If reference_date is provided, uses that date. Otherwise uses today's date.
+        Handles various formats:
+        - Full datetime: "11/17/2025 9:00:02 AM"
+        - Time only: "00:02.0" (MM:SS.m)
         
         Args:
-            timestamp_str: Time string in format MM:SS.d
+            timestamp_str: Time string
             reference_date: Optional reference date (defaults to today)
             
         Returns:
             ISO-8601 formatted datetime string
         """
         try:
-            if reference_date is None:
-                reference_date = datetime.now().date()
+            if not timestamp_str or not timestamp_str.strip():
+                return ''
             
-            # Parse the timestamp format MM:SS.d
-            parts = timestamp_str.strip().split(':')
-            minutes = int(parts[0])
-            seconds_parts = parts[1].split('.')
-            seconds = int(seconds_parts[0])
-            milliseconds = int(seconds_parts[1]) * 100 if len(seconds_parts) > 1 else 0
+            timestamp_str = timestamp_str.strip()
             
-            # Create datetime object
-            dt = datetime.combine(
-                reference_date,
-                datetime.min.time()
-            ) + timedelta(minutes=minutes, seconds=seconds, milliseconds=milliseconds)
+            # Try parsing as full datetime first (MM/DD/YYYY H:MM:SS AM/PM)
+            try:
+                dt = datetime.strptime(timestamp_str, '%m/%d/%Y %I:%M:%S %p')
+                return dt.isoformat()
+            except (ValueError, AttributeError):
+                pass
             
-            # Return ISO-8601 format
-            return dt.isoformat()
+            # Try parsing as MM:SS.d format
+            try:
+                if reference_date is None:
+                    reference_date = datetime.now().date()
+                
+                parts = timestamp_str.split(':')
+                minutes = int(parts[0])
+                seconds_parts = parts[1].split('.')
+                seconds = int(seconds_parts[0])
+                milliseconds = int(seconds_parts[1]) * 100 if len(seconds_parts) > 1 else 0
+                
+                dt = datetime.combine(
+                    reference_date,
+                    datetime.min.time()
+                ) + timedelta(minutes=minutes, seconds=seconds, milliseconds=milliseconds)
+                
+                return dt.isoformat()
+            except (ValueError, IndexError):
+                pass
+            
+            # If all parsing fails, return original string
+            logger.warning(f"Could not parse timestamp '{timestamp_str}'")
+            return timestamp_str
         
-        except (ValueError, IndexError) as e:
-            logger.warning(f"Failed to parse timestamp '{timestamp_str}': {e}")
+        except Exception as e:
+            logger.warning(f"Error converting timestamp '{timestamp_str}': {e}")
             return timestamp_str
     
     def clean_row(self, row: Dict[str, str]) -> Dict[str, str]:
@@ -87,26 +105,36 @@ class TorqueTimeSeriesCleanup:
         Clean a single row of data.
         
         Args:
-            row: Dictionary containing row data
+            row: Dictionary containing row data with keys: Timestamp, Axis, Torque_Nm, Torque_pct_of_rated
             
         Returns:
             Cleaned row dictionary
         """
-        cleaned_row = row.copy()
+        cleaned_row = {}
         
-        # Convert timestamp to ISO-8601
-        if 'Timestamp' in cleaned_row:
-            cleaned_row['Timestamp'] = self.convert_timestamp_to_iso8601(cleaned_row['Timestamp'])
+        # Get and convert timestamp
+        timestamp = row.get('Timestamp', '').strip()
+        cleaned_row['Timestamp'] = self.convert_timestamp_to_iso8601(timestamp) if timestamp else ''
         
-        # Check if either Torque_Nm or Torque_pct_of_rated are missing
-        torque_nm = cleaned_row.get('Torque_Nm', '').strip()
-        torque_pct = cleaned_row.get('Torque_pct_of_rated', '').strip()
+        # Get Axis
+        axis = row.get('Axis', '').strip()
+        cleaned_row['Axis'] = axis
         
-        if not torque_nm or not torque_pct:
+        # Get Torque_Nm - mark as missing if empty
+        torque_nm = row.get('Torque_Nm', '').strip()
+        cleaned_row['Torque_Nm'] = torque_nm if torque_nm else 'missing'
+        
+        # Get Torque_pct_of_rated - mark as missing if empty
+        torque_pct = row.get('Torque_pct_of_rated', '').strip()
+        cleaned_row['Torque_pct_of_rated'] = torque_pct if torque_pct else 'missing'
+        
+        # Determine overall data quality
+        if cleaned_row['Torque_Nm'] == 'missing' or cleaned_row['Torque_pct_of_rated'] == 'missing':
             cleaned_row['Data_Quality'] = 'missing'
         else:
             cleaned_row['Data_Quality'] = 'complete'
         
+        logger.debug(f"Cleaned row: {cleaned_row}")
         return cleaned_row
     
     def process_csv_file(self, file_content: str) -> List[Dict[str, str]]:
@@ -121,22 +149,54 @@ class TorqueTimeSeriesCleanup:
         """
         cleaned_rows = []
         
-        # Parse CSV
-        csv_reader = csv.DictReader(io.StringIO(file_content), delimiter='\t')
+        # Parse CSV content
+        lines = file_content.strip().split('\n')
         
-        if csv_reader.fieldnames is None:
-            logger.error("CSV file has no headers")
+        if not lines:
+            logger.error("CSV file is empty")
             return cleaned_rows
         
-        for row in csv_reader:
+        # Detect delimiter (tab or comma)
+        header_line = lines[0]
+        delimiter = '\t' if '\t' in header_line else ','
+        logger.info(f"Detected delimiter: {'tab' if delimiter == '\t' else 'comma'}")
+        
+        # Parse header
+        headers = header_line.split(delimiter)
+        headers = [h.strip() for h in headers]
+        logger.info(f"CSV headers: {headers}")
+        logger.info(f"Total data lines: {len(lines) - 1}")
+        
+        # Process data rows
+        for idx, line in enumerate(lines[1:], start=1):
+            if not line.strip():
+                logger.warning(f"Skipping empty line {idx}")
+                continue
+            
+            values = line.split(delimiter)
+            
+            # Log first few rows for debugging
+            if idx <= 2:
+                logger.info(f"Row {idx} raw values: {values}")
+            
+            # Create row dictionary
+            row = {}
+            for i, header in enumerate(headers):
+                value = values[i].strip() if i < len(values) else ''
+                row[header] = value
+            
+            if idx <= 2:
+                logger.info(f"Row {idx} parsed: {row}")
+            
             cleaned_row = self.clean_row(row)
             cleaned_rows.append(cleaned_row)
         
+        logger.info(f"Total cleaned rows: {len(cleaned_rows)}")
         return cleaned_rows
     
     def rows_to_csv(self, rows: List[Dict[str, str]], fieldnames: List[str]) -> str:
         """
-        Convert list of rows to CSV format.
+        Convert list of rows to CSV format with proper tab delimiters.
         
         Args:
             rows: List of row dictionaries
@@ -146,9 +206,20 @@ class TorqueTimeSeriesCleanup:
             CSV formatted string
         """
         output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=fieldnames, delimiter='\t')
+        
+        # Ensure correct field order
+        fieldnames = ['Timestamp', 'Axis', 'Torque_Nm', 'Torque_pct_of_rated', 'Data_Quality']
+        
+        writer = csv.DictWriter(output, fieldnames=fieldnames, delimiter='\t', lineterminator='\n')
         writer.writeheader()
-        writer.writerows(rows)
+        
+        for row in rows:
+            # Ensure all fields exist in row
+            for field in fieldnames:
+                if field not in row:
+                    row[field] = ''
+            writer.writerow(row)
+        
         return output.getvalue()
     
     def process_blob(self, blob_name: str) -> None:
@@ -173,8 +244,8 @@ class TorqueTimeSeriesCleanup:
                 logger.warning(f"No data to write for {blob_name}")
                 return
             
-            # Get fieldnames for CSV output
-            fieldnames = list(cleaned_rows[0].keys())
+            # Define fieldnames in correct order
+            fieldnames = ['Timestamp', 'Axis', 'Torque_Nm', 'Torque_pct_of_rated', 'Data_Quality']
             
             # Convert to CSV format
             output_csv = self.rows_to_csv(cleaned_rows, fieldnames)

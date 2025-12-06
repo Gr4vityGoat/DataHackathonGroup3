@@ -33,6 +33,43 @@
                 </div>
             </section>
 
+            <!-- Upload Section -->
+            <section class="card">
+                <h2>Upload Data</h2>
+                <div class="upload-box">
+                    <div class="upload-area" id="uploadArea" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <p class="upload-text">Drag and drop CSV files here or click to browse</p>
+                        <input type="file" id="fileInput" multiple onchange="handleFileSelect(event)" style="display: none;">
+                    </div>
+                    <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">
+                        Choose Files
+                    </button>
+                </div>
+                <div id="fileList" class="file-list" style="display: none;">
+                    <h3>Files to Upload:</h3>
+                    <ul id="uploadFileList"></ul>
+                    <div class="upload-actions">
+                        <button class="btn btn-primary" onclick="uploadFiles()">
+                            Upload Files
+                        </button>
+                        <button class="btn btn-secondary" onclick="clearFileList()">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+                <div id="uploadProgress" style="display: none;">
+                    <p id="uploadProgressText">Uploading...</p>
+                    <div class="progress-bar">
+                        <div id="uploadProgressFill" class="progress-fill"></div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Actions Section -->
             <section class="card">
                 <h2>Process Data</h2>
@@ -42,6 +79,12 @@
                     </button>
                     <button id="processSingleBtn" class="btn btn-secondary" onclick="toggleSingleFileForm()">
                         Process Single File
+                    </button>
+                    <button id="processSensorBtn" class="btn btn-tertiary" onclick="processSensorReadings()">
+                        Process Sensor Readings
+                    </button>
+                    <button id="processMaintenanceBtn" class="btn btn-tertiary" onclick="processMaintenanceNotes()">
+                        Process Maintenance Notes
                     </button>
                 </div>
 

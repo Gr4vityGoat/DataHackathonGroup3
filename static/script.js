@@ -6,6 +6,7 @@
 const API_BASE = '/api';
 const STATUS_CHECK_INTERVAL = 1000; // 1 second
 let statusCheckTimer = null;
+let filesToUpload = [];
 
 /**
  * Initialize the application
@@ -40,11 +41,20 @@ function updateServiceStatus(isReady) {
         element.className = 'status-value ready';
         document.getElementById('processAllBtn').disabled = false;
         document.getElementById('processSingleBtn').disabled = false;
+        // enable specialized buttons when service is available
+        const sensorBtn = document.getElementById('processSensorBtn');
+        if (sensorBtn) sensorBtn.disabled = false;
+        const maintenanceBtn = document.getElementById('processMaintenanceBtn');
+        if (maintenanceBtn) maintenanceBtn.disabled = false;
     } else {
         element.textContent = '🔴 Not Available';
         element.className = 'status-value error';
         document.getElementById('processAllBtn').disabled = true;
         document.getElementById('processSingleBtn').disabled = true;
+        const sensorBtn = document.getElementById('processSensorBtn');
+        if (sensorBtn) sensorBtn.disabled = true;
+        const maintenanceBtn = document.getElementById('processMaintenanceBtn');
+        if (maintenanceBtn) maintenanceBtn.disabled = true;
     }
 }
 
@@ -202,6 +212,245 @@ function processSingleFile() {
 }
 
 /**
+ * Process sensor readings (specialized handler)
+ */
+function processSensorReadings() {
+    if (!confirm('Start processing sensor_readings.csv?')) {
+        return;
+    }
+
+    const button = document.getElementById('processSensorBtn');
+    button.disabled = true;
+    button.textContent = 'Processing...';
+
+    fetch(`${API_BASE}/process-sensor`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => {
+        if (response.ok || response.status === 202) {
+            showNotification('Sensor processing started. Monitor status below.', 'success');
+            return response.json();
+        } else {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+    })
+    .then(data => {
+        console.log('Sensor processing response:', data);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification(`Error starting sensor processing: ${error.message}`, 'error');
+        button.disabled = false;
+        button.textContent = 'Process Sensor Readings';
+    });
+}
+
+
+/**
+ * Process maintenance notes
+ */
+function processMaintenanceNotes() {
+    if (!confirm('Start processing maintenance_notes.txt?')) {
+        return;
+    }
+
+    const button = document.getElementById('processMaintenanceBtn');
+    if (!button) return;
+    button.disabled = true;
+    button.textContent = 'Processing...';
+
+    fetch(`${API_BASE}/process-maintenance`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => {
+        if (response.ok || response.status === 202) {
+            showNotification('Maintenance processing started', 'success');
+        } else {
+            return response.json().then(data => { throw new Error(data.error || 'Failed to start maintenance processing') });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification(`Error starting maintenance processing: ${error.message}`, 'error');
+        button.disabled = false;
+        button.textContent = 'Process Maintenance Notes';
+    });
+}
+
+/**
+ * Handle drag over event for file upload
+ */
+function handleDragOver(event) {
+    event.preventDefault();
+    const uploadArea = document.getElementById('uploadArea');
+    uploadArea.classList.add('dragover');
+}
+
+/**
+ * Handle drag leave event for file upload
+ */
+function handleDragLeave(event) {
+    event.preventDefault();
+    const uploadArea = document.getElementById('uploadArea');
+    uploadArea.classList.remove('dragover');
+}
+
+/**
+ * Handle file drop event
+ */
+function handleDrop(event) {
+    event.preventDefault();
+    const uploadArea = document.getElementById('uploadArea');
+    uploadArea.classList.remove('dragover');
+    
+    const files = event.dataTransfer.files;
+    handleFiles(files);
+}
+
+/**
+ * Handle file selection from input
+ */
+function handleFileSelect(event) {
+    const files = event.target.files;
+    handleFiles(files);
+}
+
+/**
+ * Process selected files
+ */
+function handleFiles(files) {
+    filesToUpload = [];
+
+    for (let file of files) {
+        // Accept any file type for upload
+        filesToUpload.push(file);
+    }
+    
+    if (filesToUpload.length > 0) {
+        displayFileList();
+    }
+}
+
+/**
+ * Display the list of files to upload
+ */
+function displayFileList() {
+    const fileList = document.getElementById('fileList');
+    const uploadFileList = document.getElementById('uploadFileList');
+    
+    uploadFileList.innerHTML = '';
+    
+    filesToUpload.forEach((file, index) => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <div>
+                <div class="file-name">${file.name}</div>
+                <div class="file-size">${formatFileSize(file.size)}</div>
+            </div>
+            <button class="remove-btn" onclick="removeFile(${index})">Remove</button>
+        `;
+        uploadFileList.appendChild(li);
+    });
+    
+    fileList.style.display = 'block';
+}
+
+/**
+ * Remove a file from the upload list
+ */
+function removeFile(index) {
+    filesToUpload.splice(index, 1);
+    if (filesToUpload.length === 0) {
+        document.getElementById('fileList').style.display = 'none';
+        document.getElementById('fileInput').value = '';
+    } else {
+        displayFileList();
+    }
+}
+
+/**
+ * Clear all files from the upload list
+ */
+function clearFileList() {
+    filesToUpload = [];
+    document.getElementById('fileList').style.display = 'none';
+    document.getElementById('fileInput').value = '';
+}
+
+/**
+ * Format file size for display
+ */
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+/**
+ * Upload files to Azure Blob Storage
+ */
+function uploadFiles() {
+    if (filesToUpload.length === 0) {
+        showNotification('No files to upload', 'error');
+        return;
+    }
+    
+    const progressDiv = document.getElementById('uploadProgress');
+    const progressFill = document.getElementById('uploadProgressFill');
+    const progressText = document.getElementById('uploadProgressText');
+    const fileList = document.getElementById('fileList');
+    
+    progressDiv.style.display = 'block';
+    fileList.style.display = 'none';
+    
+    let uploadedCount = 0;
+    const totalFiles = filesToUpload.length;
+    
+    filesToUpload.forEach((file, index) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        fetch(`${API_BASE}/upload`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Failed to upload ${file.name}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            uploadedCount++;
+            const progress = Math.round((uploadedCount / totalFiles) * 100);
+            progressFill.style.width = progress + '%';
+            progressText.textContent = `Uploading... ${uploadedCount}/${totalFiles} files`;
+            
+            if (uploadedCount === totalFiles) {
+                progressText.textContent = 'Upload complete!';
+                showNotification(`Successfully uploaded ${totalFiles} file(s)`, 'success');
+                setTimeout(() => {
+                    progressDiv.style.display = 'none';
+                    clearFileList();
+                }, 2000);
+            }
+        })
+        .catch(error => {
+            console.error('Upload error:', error);
+            showNotification(`Error uploading ${file.name}: ${error.message}`, 'error');
+        });
+    });
+}
+
+/**
  * Show notification message
  */
 function showNotification(message, type = 'info') {
@@ -209,12 +458,24 @@ function showNotification(message, type = 'info') {
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
     notification.textContent = message;
+    
+    let bgColor;
+    if (type === 'success') {
+        bgColor = '#4caf50';
+    } else if (type === 'error') {
+        bgColor = '#f44336';
+    } else if (type === 'warning') {
+        bgColor = '#ff9800';
+    } else {
+        bgColor = '#2196f3';
+    }
+    
     notification.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
         padding: 16px 24px;
-        background: ${type === 'success' ? '#4caf50' : type === 'error' ? '#f44336' : '#2196f3'};
+        background: ${bgColor};
         color: white;
         border-radius: 8px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);

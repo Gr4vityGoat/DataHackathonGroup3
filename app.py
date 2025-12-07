@@ -9,6 +9,10 @@ from flask import Flask, render_template, jsonify, request
 from src.data_processing.torqueTimeSeries import TorqueTimeSeriesCleanup
 from src.data_processing.sensorReading import SensorReadingsCleanup
 from src.data_processing.maintenanceNotes import MaintenanceNotesCleanup
+from src.data_processing.errorLogs import ErrorLogsCleanup
+from src.data_processing.torqueEventsByCycle import TorqueEventsByCycleCleanup
+from src.data_processing.systemAlerts import SystemAlertsCleanup
+from src.data_processing.performanceMetrics import PerformanceMetricsCleanup
 import logging
 from functools import wraps
 import threading
@@ -89,20 +93,41 @@ def process_files():
 
 
 def _background_process():
-    """Background task to process files."""
+    """Background task to process all files using all available processors."""
     global processing_status
     
     processing_status['is_processing'] = True
-    processing_status['message'] = 'Initializing...'
+    processing_status['message'] = 'Initializing batch processing...'
     processing_status['files_processed'] = 0
     
     try:
-        processing_status['message'] = 'Starting batch processing...'
-        cleanup_service.process_all_blobs()
+        processors = [
+            ('Torque Time Series', TorqueTimeSeriesCleanup, 'torque_timeseries.csv'),
+            ('Sensor Readings', SensorReadingsCleanup, 'sensor_readings.csv'),
+            ('Maintenance Notes', MaintenanceNotesCleanup, 'maintenance_notes.txt'),
+            ('Error Logs', ErrorLogsCleanup, 'error_logs.txt'),
+            ('Torque Events', TorqueEventsByCycleCleanup, 'torque_events_by_cycle.csv'),
+            ('System Alerts', SystemAlertsCleanup, 'system_alerts.txt'),
+            ('Performance Metrics', PerformanceMetricsCleanup, 'performance_metrics.csv'),
+        ]
         
-        processing_status['message'] = 'Processing completed successfully'
-        processing_status['files_processed'] = 1
-        logger.info("Batch processing completed successfully")
+        files_processed = 0
+        
+        for processor_name, processor_class, expected_file in processors:
+            try:
+                processing_status['message'] = f'Processing {processor_name}...'
+                service = processor_class()
+                service.process_all_blobs()
+                files_processed += 1
+                logger.info(f"Successfully processed {processor_name}")
+            except Exception as e:
+                logger.warning(f"No {processor_name} file found or error processing: {e}")
+                # Continue with next processor even if one fails
+                continue
+        
+        processing_status['message'] = f'Batch processing completed successfully. Processed {files_processed} file type(s)'
+        processing_status['files_processed'] = files_processed
+        logger.info(f"Batch processing completed. Processed {files_processed} file types")
         
     except Exception as e:
         processing_status['message'] = f'Error: {str(e)}'
@@ -177,6 +202,78 @@ def process_maintenance_notes():
     }), 202
 
 
+@app.route('/api/process-errorlogs', methods=['POST'])
+def process_error_logs():
+    """Trigger error logs processing in background thread."""
+    global processing_status
+
+    if processing_status['is_processing']:
+        return jsonify({'error': 'Processing already in progress'}), 400
+
+    thread = threading.Thread(target=_background_process_errorlogs)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'message': 'Error logs processing started',
+        'status': 'processing'
+    }), 202
+
+
+@app.route('/api/process-system-alerts', methods=['POST'])
+def process_system_alerts():
+    """Trigger system alerts processing in background thread."""
+    global processing_status
+
+    if processing_status['is_processing']:
+        return jsonify({'error': 'Processing already in progress'}), 400
+
+    thread = threading.Thread(target=_background_process_system_alerts)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'message': 'System alerts processing started',
+        'status': 'processing'
+    }), 202
+
+
+@app.route('/api/process-torque-events', methods=['POST'])
+def process_torque_events():
+    """Trigger torque events by cycle processing in background thread."""
+    global processing_status
+
+    if processing_status['is_processing']:
+        return jsonify({'error': 'Processing already in progress'}), 400
+
+    thread = threading.Thread(target=_background_process_torque_events)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'message': 'Torque events processing started',
+        'status': 'processing'
+    }), 202
+
+
+@app.route('/api/process-performance-metrics', methods=['POST'])
+def process_performance_metrics():
+    """Trigger performance metrics processing in background thread."""
+    global processing_status
+
+    if processing_status['is_processing']:
+        return jsonify({'error': 'Processing already in progress'}), 400
+
+    thread = threading.Thread(target=_background_process_performance_metrics)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'message': 'Performance metrics processing started',
+        'status': 'processing'
+    }), 202
+
+
 def _background_process_sensor():
     """Background task to run SensorReadingsCleanup.process_all_blobs()."""
     global processing_status
@@ -213,6 +310,86 @@ def _background_process_maintenance():
     except Exception as e:
         processing_status['message'] = f'Error: {str(e)}'
         logger.error(f'Error processing maintenance notes: {e}')
+    finally:
+        processing_status['is_processing'] = False
+
+
+def _background_process_errorlogs():
+    """Background task to run ErrorLogsCleanup.process_all_blobs()."""
+    global processing_status
+    processing_status['is_processing'] = True
+    processing_status['message'] = 'Processing error logs...'
+    processing_status['files_processed'] = 0
+
+    try:
+        service = ErrorLogsCleanup()
+        service.process_all_blobs()
+        processing_status['message'] = 'Error logs processing completed'
+        processing_status['files_processed'] = 1
+        logger.info('Error logs processing completed')
+    except Exception as e:
+        processing_status['message'] = f'Error: {str(e)}'
+        logger.error(f'Error processing error logs: {e}')
+    finally:
+        processing_status['is_processing'] = False
+
+
+def _background_process_torque_events():
+    """Background task to run TorqueEventsByCycleCleanup.process_all_blobs()."""
+    global processing_status
+    processing_status['is_processing'] = True
+    processing_status['message'] = 'Processing torque events by cycle...'
+    processing_status['files_processed'] = 0
+
+    try:
+        service = TorqueEventsByCycleCleanup()
+        service.process_all_blobs()
+        processing_status['message'] = 'Torque events processing completed'
+        processing_status['files_processed'] = 1
+        logger.info('Torque events by cycle processing completed')
+    except Exception as e:
+        processing_status['message'] = f'Error: {str(e)}'
+        logger.error(f'Error processing torque events by cycle: {e}')
+    finally:
+        processing_status['is_processing'] = False
+
+
+def _background_process_system_alerts():
+    """Background task to run SystemAlertsCleanup.process_all_blobs()."""
+    global processing_status
+    processing_status['is_processing'] = True
+    processing_status['message'] = 'Processing system alerts...'
+    processing_status['files_processed'] = 0
+
+    try:
+        service = SystemAlertsCleanup()
+        service.process_all_blobs()
+        processing_status['message'] = 'System alerts processing completed'
+        processing_status['files_processed'] = 1
+        logger.info('System alerts processing completed')
+    except Exception as e:
+        processing_status['message'] = f'Error: {str(e)}'
+        logger.error(f'Error processing system alerts: {e}')
+    finally:
+        processing_status['is_processing'] = False
+
+
+def _background_process_performance_metrics():
+    """Background task to run PerformanceMetricsCleanup.process_all_blobs()."""
+    global processing_status
+    processing_status['is_processing'] = True
+    processing_status['message'] = 'Processing performance metrics...'
+    processing_status['files_processed'] = 0
+
+    try:
+        service = PerformanceMetricsCleanup()
+        service.process_all_blobs()
+        processing_status['message'] = 'Performance metrics processing completed'
+        processing_status['files_processed'] = 1
+        logger.info('Performance metrics processing completed')
+    except Exception as e:
+        processing_status['message'] = f'Error: {str(e)}'
+        logger.error(f'Error processing performance metrics: {e}')
     finally:
         processing_status['is_processing'] = False
 

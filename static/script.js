@@ -14,6 +14,16 @@ let filesToUpload = [];
 document.addEventListener('DOMContentLoaded', function() {
     checkServiceHealth();
     startStatusPolling();
+    // Make the upload area clickable and forward clicks to the hidden file input
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    if (uploadArea && fileInput) {
+        uploadArea.addEventListener('click', (e) => {
+            // Prevent accidental drop behavior from triggering twice
+            if (e.target && e.target.tagName === 'INPUT') return;
+            fileInput.click();
+        });
+    }
 });
 
 /**
@@ -46,6 +56,8 @@ function updateServiceStatus(isReady) {
         if (sensorBtn) sensorBtn.disabled = false;
         const maintenanceBtn = document.getElementById('processMaintenanceBtn');
         if (maintenanceBtn) maintenanceBtn.disabled = false;
+        const torqueEventsBtn = document.getElementById('processTorqueEventsBtn');
+        if (torqueEventsBtn) torqueEventsBtn.disabled = false;
     } else {
         element.textContent = '🔴 Not Available';
         element.className = 'status-value error';
@@ -55,6 +67,10 @@ function updateServiceStatus(isReady) {
         if (sensorBtn) sensorBtn.disabled = true;
         const maintenanceBtn = document.getElementById('processMaintenanceBtn');
         if (maintenanceBtn) maintenanceBtn.disabled = true;
+        const torqueEventsBtn = document.getElementById('processTorqueEventsBtn');
+        if (torqueEventsBtn) torqueEventsBtn.disabled = true;
+            const errorLogsBtn = document.getElementById('processErrorLogsBtn');
+            if (errorLogsBtn) errorLogsBtn.disabled = true;
     }
 }
 
@@ -87,13 +103,18 @@ function updateProcessingStatus() {
             if (data.is_processing) {
                 processingElement.textContent = '⏳ In Progress';
                 processingElement.className = 'status-value processing';
+                // Disable all processing buttons while processing
                 document.getElementById('processAllBtn').disabled = true;
                 document.getElementById('processSingleBtn').disabled = true;
+                disableAllProcessingButtons(true);
             } else {
                 processingElement.textContent = '✓ Not processing';
                 processingElement.className = 'status-value ready';
+                // Re-enable all processing buttons when done
                 document.getElementById('processAllBtn').disabled = false;
                 document.getElementById('processSingleBtn').disabled = false;
+                disableAllProcessingButtons(false);
+                resetAllButtonText();
             }
 
             // Update status message
@@ -119,6 +140,87 @@ function updateProcessingStatus() {
 }
 
 /**
+ * Disable or enable all specialized processing buttons
+ */
+function disableAllProcessingButtons(disabled) {
+    const buttons = [
+        'processSensorBtn',
+        'processMaintenanceBtn',
+        'processSystemAlertsBtn',
+        'processErrorLogsBtn',
+        'processTorqueEventsBtn',
+        'processPerformanceMetricsBtn'
+    ];
+    buttons.forEach(btnId => {
+        const btn = document.getElementById(btnId);
+        if (btn) btn.disabled = disabled;
+    });
+}
+
+/**
+ * Reset all button text to original labels
+ */
+function resetAllButtonText() {
+    const buttonTextMap = {
+        'processSensorBtn': 'Process Sensor Readings',
+        'processMaintenanceBtn': 'Process Maintenance Notes',
+        'processSystemAlertsBtn': 'Process System Alerts',
+        'processErrorLogsBtn': 'Process Error Logs',
+        'processTorqueEventsBtn': 'Process Torque Events',
+        'processPerformanceMetricsBtn': 'Process Performance Metrics'
+    };
+    Object.entries(buttonTextMap).forEach(([btnId, text]) => {
+        const btn = document.getElementById(btnId);
+        if (btn) btn.textContent = text;
+    });
+}
+
+
+        /**
+         * Process error logs (specialized handler)
+         */
+        function processErrorLogs() {
+            if (!confirm('Start processing error_logs.txt?')) {
+                return;
+            }
+
+            const button = document.getElementById('processErrorLogsBtn');
+            if (!button) return;
+            button.disabled = true;
+            button.textContent = 'Processing...';
+            disableAllProcessingButtons(true);
+            document.getElementById('processAllBtn').disabled = true;
+            document.getElementById('processSingleBtn').disabled = true;
+
+            fetch(`${API_BASE}/process-errorlogs`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (response.ok || response.status === 202) {
+                    showNotification('Error logs processing started. Monitor status below.', 'success');
+                    return response.json();
+                } else {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+            })
+            .then(data => {
+                console.log('Error logs response:', data);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification(`Error starting error logs processing: ${error.message}`, 'error');
+                button.disabled = false;
+                button.textContent = 'Process Error Logs';
+                disableAllProcessingButtons(false);
+                document.getElementById('processAllBtn').disabled = false;
+                document.getElementById('processSingleBtn').disabled = false;
+            });
+        }
+
+/**
  * Process all files
  */
 function processAllFiles() {
@@ -129,6 +231,8 @@ function processAllFiles() {
     const button = document.getElementById('processAllBtn');
     button.disabled = true;
     button.textContent = 'Processing...';
+    disableAllProcessingButtons(true);
+    document.getElementById('processSingleBtn').disabled = true;
 
     fetch(`${API_BASE}/process`, {
         method: 'POST',
@@ -138,7 +242,7 @@ function processAllFiles() {
     })
     .then(response => {
         if (response.ok || response.status === 202) {
-            showNotification('Processing started. Please monitor the status below.', 'success');
+            showNotification('Batch processing started. Monitor status below.', 'success');
             return response.json();
         } else {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -152,6 +256,8 @@ function processAllFiles() {
         showNotification(`Error starting process: ${error.message}`, 'error');
         button.disabled = false;
         button.textContent = 'Process All Files';
+        disableAllProcessingButtons(false);
+        document.getElementById('processSingleBtn').disabled = false;
     });
 }
 
@@ -165,9 +271,11 @@ function toggleSingleFileForm() {
     if (isHidden) {
         form.style.display = 'block';
         document.getElementById('filename').focus();
+        document.getElementById('processSingleBtn').textContent = 'Hide File Form';
     } else {
         form.style.display = 'none';
         document.getElementById('filename').value = '';
+        document.getElementById('processSingleBtn').textContent = 'Process by Filename';
     }
 }
 
@@ -185,6 +293,13 @@ function processSingleFile() {
     if (!confirm(`Start processing file: ${filename}?`)) {
         return;
     }
+
+    const button = document.getElementById('processSingleBtn');
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Processing...';
+    disableAllProcessingButtons(true);
+    document.getElementById('processAllBtn').disabled = true;
 
     fetch(`${API_BASE}/process-single`, {
         method: 'POST',
@@ -208,6 +323,10 @@ function processSingleFile() {
     .catch(error => {
         console.error('Error:', error);
         showNotification(`Error starting process: ${error.message}`, 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+        disableAllProcessingButtons(false);
+        document.getElementById('processAllBtn').disabled = false;
     });
 }
 
@@ -222,6 +341,9 @@ function processSensorReadings() {
     const button = document.getElementById('processSensorBtn');
     button.disabled = true;
     button.textContent = 'Processing...';
+    disableAllProcessingButtons(true);
+    document.getElementById('processAllBtn').disabled = true;
+    document.getElementById('processSingleBtn').disabled = true;
 
     fetch(`${API_BASE}/process-sensor`, {
         method: 'POST',
@@ -245,6 +367,9 @@ function processSensorReadings() {
         showNotification(`Error starting sensor processing: ${error.message}`, 'error');
         button.disabled = false;
         button.textContent = 'Process Sensor Readings';
+        disableAllProcessingButtons(false);
+        document.getElementById('processAllBtn').disabled = false;
+        document.getElementById('processSingleBtn').disabled = false;
     });
 }
 
@@ -261,6 +386,9 @@ function processMaintenanceNotes() {
     if (!button) return;
     button.disabled = true;
     button.textContent = 'Processing...';
+    disableAllProcessingButtons(true);
+    document.getElementById('processAllBtn').disabled = true;
+    document.getElementById('processSingleBtn').disabled = true;
 
     fetch(`${API_BASE}/process-maintenance`, {
         method: 'POST',
@@ -270,7 +398,7 @@ function processMaintenanceNotes() {
     })
     .then(response => {
         if (response.ok || response.status === 202) {
-            showNotification('Maintenance processing started', 'success');
+            showNotification('Maintenance processing started. Monitor status below.', 'success');
         } else {
             return response.json().then(data => { throw new Error(data.error || 'Failed to start maintenance processing') });
         }
@@ -280,6 +408,143 @@ function processMaintenanceNotes() {
         showNotification(`Error starting maintenance processing: ${error.message}`, 'error');
         button.disabled = false;
         button.textContent = 'Process Maintenance Notes';
+        disableAllProcessingButtons(false);
+        document.getElementById('processAllBtn').disabled = false;
+        document.getElementById('processSingleBtn').disabled = false;
+    });
+}
+
+
+/**
+ * Process torque events by cycle
+ */
+function processTorqueEvents() {
+    if (!confirm('Start processing torque_events_by_cycle.csv?')) {
+        return;
+    }
+
+    const button = document.getElementById('processTorqueEventsBtn');
+    if (!button) return;
+    button.disabled = true;
+    button.textContent = 'Processing...';
+    disableAllProcessingButtons(true);
+    document.getElementById('processAllBtn').disabled = true;
+    document.getElementById('processSingleBtn').disabled = true;
+
+    fetch(`${API_BASE}/process-torque-events`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => {
+        if (response.ok || response.status === 202) {
+            showNotification('Torque events processing started. Monitor status below.', 'success');
+            return response.json();
+        } else {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+    })
+    .then(data => {
+        console.log('Torque events response:', data);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification(`Error starting torque events processing: ${error.message}`, 'error');
+        button.disabled = false;
+        button.textContent = 'Process Torque Events';
+        disableAllProcessingButtons(false);
+        document.getElementById('processAllBtn').disabled = false;
+        document.getElementById('processSingleBtn').disabled = false;
+    });
+}
+
+
+/**
+ * Process system alerts (specialized handler)
+ */
+function processSystemAlerts() {
+    if (!confirm('Start processing system_alerts.txt?')) {
+        return;
+    }
+
+    const button = document.getElementById('processSystemAlertsBtn');
+    if (!button) return;
+    button.disabled = true;
+    button.textContent = 'Processing...';
+    disableAllProcessingButtons(true);
+    document.getElementById('processAllBtn').disabled = true;
+    document.getElementById('processSingleBtn').disabled = true;
+
+    fetch(`${API_BASE}/process-system-alerts`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => {
+        if (response.ok || response.status === 202) {
+            showNotification('System alerts processing started. Monitor status below.', 'success');
+            return response.json();
+        } else {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+    })
+    .then(data => {
+        console.log('System alerts response:', data);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification(`Error starting system alerts processing: ${error.message}`, 'error');
+        button.disabled = false;
+        button.textContent = 'Process System Alerts';
+        disableAllProcessingButtons(false);
+        document.getElementById('processAllBtn').disabled = false;
+        document.getElementById('processSingleBtn').disabled = false;
+    });
+}
+
+/**
+ * Process performance metrics (specialized handler)
+ */
+function processPerformanceMetrics() {
+    if (!confirm('Start processing performance_metrics.csv?')) {
+        return;
+    }
+
+    const button = document.getElementById('processPerformanceMetricsBtn');
+    if (!button) return;
+    button.disabled = true;
+    button.textContent = 'Processing...';
+    disableAllProcessingButtons(true);
+    document.getElementById('processAllBtn').disabled = true;
+    document.getElementById('processSingleBtn').disabled = true;
+
+    fetch(`${API_BASE}/process-performance-metrics`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => {
+        if (response.ok || response.status === 202) {
+            showNotification('Performance metrics processing started. Monitor status below.', 'success');
+            return response.json();
+        } else {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+    })
+    .then(data => {
+        console.log('Performance metrics response:', data);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification(`Error starting performance metrics processing: ${error.message}`, 'error');
+        button.disabled = false;
+        button.textContent = 'Process Performance Metrics';
+        disableAllProcessingButtons(false);
+        document.getElementById('processAllBtn').disabled = false;
+        document.getElementById('processSingleBtn').disabled = false;
     });
 }
 

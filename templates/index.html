@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>Torque Time Series Data Cleanup</h1>
+            <h1>ER-4iA Robot Data Cleanup Service</h1>
             <p class="subtitle">Azure Blob Storage Data Processing Service</p>
         </header>
 
@@ -78,13 +78,25 @@
                         Process All Files
                     </button>
                     <button id="processSingleBtn" class="btn btn-secondary" onclick="toggleSingleFileForm()">
-                        Process Single File
+                        Process by Filename
                     </button>
                     <button id="processSensorBtn" class="btn btn-tertiary" onclick="processSensorReadings()">
                         Process Sensor Readings
                     </button>
                     <button id="processMaintenanceBtn" class="btn btn-tertiary" onclick="processMaintenanceNotes()">
                         Process Maintenance Notes
+                    </button>
+                    <button id="processSystemAlertsBtn" class="btn btn-tertiary" onclick="processSystemAlerts()">
+                        Process System Alerts
+                    </button>
+                    <button id="processErrorLogsBtn" class="btn btn-tertiary" onclick="processErrorLogs()">
+                        Process Error Logs
+                    </button>
+                    <button id="processTorqueEventsBtn" class="btn btn-tertiary" onclick="processTorqueEvents()">
+                        Process Torque Events
+                    </button>
+                    <button id="processPerformanceMetricsBtn" class="btn btn-tertiary" onclick="processPerformanceMetrics()">
+                        Process Performance Metrics
                     </button>
                 </div>
 

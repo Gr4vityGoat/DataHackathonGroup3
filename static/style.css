@@ -411,3 +411,57 @@ footer {
         font-size: 0.95em;
     }
 }
+
+/* Additional styles added to restore missing visual rules */
+
+/* Tertiary buttons (used in the UI) */
+.btn-tertiary {
+    padding: 12px 24px;
+    border: 2px solid #e0e0e0;
+    background: #ffffff;
+    color: #333;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-tertiary:hover {
+    background: #f5f5f5;
+    transform: translateY(-2px);
+}
+.btn-tertiary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Notification container styles (fallback if JS does not inline styles) */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 16px 24px;
+    color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 1000;
+}
+.notification-success { background: #4caf50; }
+.notification-error   { background: #f44336; }
+.notification-warning { background: #ff9800; }
+.notification-info    { background: #2196f3; }
+
+/* Make upload area inner input cover area when visible (defensive) */
+.upload-area { position: relative; }
+.upload-area input[type=file] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* Small accessibility/visual tweaks */
+.file-list li .file-name { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-list li .remove-btn { font-weight: 700; }
